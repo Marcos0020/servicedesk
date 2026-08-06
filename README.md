@@ -8,6 +8,14 @@ O sistema foi desenvolvido para uso interno em uma empresa de tecnologia, cobrin
 
 ---
 
+## 📸 Screenshot
+
+![Dashboard do Service Desk](docs/screenshots/dashboard.png)
+
+*Dashboard com visão geral de chamados. A tabela de chamados recentes foi ocultada nesta captura por conter dados de clientes.*
+
+---
+
 ## ✨ Principais funcionalidades
 
 - **Autenticação JWT** com controle de papéis (admin / supervisor / técnico)
