@@ -1,0 +1,55 @@
+# ==============================
+# Dependencies
+# ==============================
+node_modules/
+.npm/
+.pnp/
+.pnp.js
+
+# ==============================
+# Build output
+# ==============================
+dist/
+build/
+*.tsbuildinfo
+
+# ==============================
+# Environment & secrets
+# ==============================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ==============================
+# Runtime data / uploads / backups
+# (real ticket attachments and backups must never be versioned)
+# ==============================
+backend/storage/**
+!backend/storage/tickets/.gitkeep
+backend/backups/**
+!backend/backups/.gitkeep
+*.log
+logs/
+
+# ==============================
+# Database dumps / exports
+# (never commit production data dumps)
+# ==============================
+*.dmp
+*.dump
+
+# ==============================
+# Editor / OS
+# ==============================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ==============================
+# Testing / coverage
+# ==============================
+coverage/
+.nyc_output/
