@@ -95,6 +95,13 @@ npm run dev
 
 A aplicação sobe por padrão em `http://localhost:5173` (frontend) e `http://localhost:3000` (API).
 
+## 📘 Documentação Operacional & DBA Runbook
+
+Além do código-fonte da aplicação, este repositório inclui a documentação completa de sustentação e infraestrutura de banco de dados:
+
+* **[Runbook: Migração Oracle XE 21c (Docker para VirtualBox)](docs/runbooks/migracao-oracle-docker-virtualbox.md):** Guia prático cobrindo exportação e importação via **Oracle Data Pump** (expdp / impdp), configuração de VM Oracle Linux 8.10, liberação de regras no firewall do Linux (irewalld), configuração de pool de conexões e troubleshooting avançado de erros comuns (ORA-12154, ORA-39087, ORA-12541).
+* Versão original em PDF disponível em: [database/Migracao_Oracle_Docker_para_VirtualBox.pdf](database/Migracao_Oracle_Docker_para_VirtualBox.pdf).
+
 ## 🔐 Segurança e dados sensíveis
 
 Este repositório foi preparado especificamente para publicação pública. Antes de subir, os seguintes itens foram **removidos ou sanitizados**:
