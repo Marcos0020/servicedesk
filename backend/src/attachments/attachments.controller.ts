@@ -8,6 +8,7 @@ import { Response } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AttachmentsService } from './attachments.service';
+import { Roles } from '../common/decorators/roles.decorator';
 
 @ApiTags('Anexos')
 @ApiBearerAuth()
@@ -86,7 +87,8 @@ export class AttachmentsController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Excluir anexo' })
+  @Roles('admin', 'supervisor')
+  @ApiOperation({ summary: 'Excluir anexo (admin e supervisor)' })
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.attachmentsService.remove(id);
   }

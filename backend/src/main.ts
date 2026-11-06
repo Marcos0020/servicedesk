@@ -19,9 +19,24 @@ async function bootstrap() {
     crossOriginEmbedderPolicy: false,
   }));
 
-  // CORS
+  // CORS seguro com lista controlada de origens
+  const frontendUrl = config.get<string>('FRONTEND_URL');
+  const allowedOrigins = [
+    frontendUrl,
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+  ].filter(Boolean) as string[];
+
   app.enableCors({
-    origin: true,
+    origin: (requestOrigin, callback) => {
+      // Permite requisições sem origin (como mobile apps, curl, same-origin)
+      if (!requestOrigin) return callback(null, true);
+      if (allowedOrigins.includes(requestOrigin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('Bloqueado por política de CORS'));
+    },
     credentials: true,
     exposedHeaders: ['Content-Disposition', 'Content-Length', 'Content-Type'],
   });

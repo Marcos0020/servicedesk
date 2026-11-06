@@ -22,6 +22,19 @@ export class EmailService {
     let processed = 0;
     let skipped = 0;
 
+    // ✅ AJUSTADO: o timeout de segurança agora é dinâmico. Como o tamanho da
+    // caixa só é conhecido depois do imap.search (assíncrono), usamos um timer
+    // que começa com um valor base (cobrindo conexão + busca) e é reagendado
+    // com um valor maior assim que soubermos quantos e-mails serão processados.
+    let safetyTimer: ReturnType<typeof setTimeout>;
+    let rejectOnTimeout: (err: Error) => void;
+    const scheduleSafetyTimeout = (ms: number) => {
+      clearTimeout(safetyTimer);
+      safetyTimer = setTimeout(() => {
+        rejectOnTimeout(new Error(`Email fetch timeout after ${Math.round(ms / 1000)}s`));
+      }, ms);
+    };
+
     // ✅ MUDANÇA: era "return new Promise(...)", agora é uma variável separada
     const imapPromise = new Promise<{ processed: number; skipped: number }>((resolve, reject) => {
       const imap = new Imap({
@@ -30,7 +43,7 @@ export class EmailService {
         host: 'imap.gmail.com',
         port: 993,
         tls: true,
-        tlsOptions: { rejectUnauthorized: false },
+        tlsOptions: { rejectUnauthorized: this.config.get('IMAP_REJECT_UNAUTHORIZED', 'true') === 'true' },
         authTimeout: 10000,
         connTimeout: 15000, // ✅ ADICIONADO: timeout de conexão
       });
@@ -52,8 +65,21 @@ export class EmailService {
               return resolve({ processed, skipped });
             }
 
-            const limitedUids = uids.slice(0, 50);
+            // ✅ CORRIGIDO: removido o slice(0, 50) — agora processa TODOS os
+            // e-mails encontrados na pasta, não apenas os primeiros 50.
+            const limitedUids = uids;
             this.logger.log(`Found ${uids.length} email(s) no marcador, processing ${limitedUids.length}`);
+
+            // ✅ AJUSTADO: agora que sabemos quantos e-mails serão processados,
+            // reagendamos o timeout de segurança: base de 2 min + 3s por e-mail
+            // (cobrindo parsing/anexos, com o novo timeout de parse de 90s por
+            // e-mail), com teto de 30 min para evitar espera indefinida em caso
+            // de falha real.
+            const dynamicTimeoutMs = Math.min(
+              120000 + limitedUids.length * 3000,
+              30 * 60 * 1000,
+            );
+            scheduleSafetyTimeout(dynamicTimeoutMs);
  
 
 			const emails: ParsedMail[] = [];
@@ -90,17 +116,36 @@ export class EmailService {
 					});
 				  });
 
-				  await Promise.race([
-					parsePromise,
-					new Promise((resolve) =>
-					  setTimeout(() => {
-						this.logger.warn('Parser timeout — email ignorado');
-						resolve(null);
-					  }, 20000)
-					)
+				  // ✅ AUMENTADO: 20s era insuficiente para e-mails com anexos grandes
+				  // (ex.: planilhas .xlsx volumosas), fazendo-os expirar sempre no
+				  // mesmo timeout — o mesmo e-mail nunca era processado, ciclo após
+				  // ciclo, sem nunca virar chamado. Elevado para 90s.
+				  const PARSE_TIMEOUT_MS = 90000;
+				  const timedOut = await Promise.race([
+					parsePromise.then(() => false),
+					new Promise<boolean>((resolve) =>
+					  setTimeout(() => resolve(true), PARSE_TIMEOUT_MS)
+					),
 				  ]);
 
-				  if (mail) {
+				  if (timedOut) {
+					// ✅ ADICIONADO: mesmo quando o parse completo expira, tentamos
+					// extrair rapidamente só os cabeçalhos (assunto/remetente), sem
+					// processar anexos, para logar QUAL e-mail travou — antes o log
+					// era anônimo e não dava pra saber qual mensagem estava presa.
+					try {
+					  const headerOnly = await new Promise<ParsedMail | null>((resolve) => {
+						simpleParser(buffer, { skipHtmlToText: true, skipTextToHtml: true } as any, (err, parsed) => {
+						  resolve(err ? null : parsed);
+						});
+					  });
+					  const subj = headerOnly?.subject || '(assunto desconhecido)';
+					  const from = headerOnly?.from?.value?.[0]?.address || '(remetente desconhecido)';
+					  this.logger.warn(`Parser timeout — email ignorado | Assunto: "${subj}" | De: ${from}`);
+					} catch {
+					  this.logger.warn('Parser timeout — email ignorado (não foi possível identificar assunto/remetente)');
+					}
+				  } else if (mail) {
 					emails.push(mail);
 				  }
 
@@ -147,12 +192,18 @@ export class EmailService {
       imap.connect();
     });
 
-    // ✅ ADICIONADO: timeout de segurança de 2 minutos
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Email fetch timeout after 2 minutes')), 120000)
-    );
+    // Timeout inicial cobrindo apenas conexão + busca (reagendado para um valor
+    // maior assim que soubermos quantos e-mails existem — ver scheduleSafetyTimeout).
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      rejectOnTimeout = reject;
+      scheduleSafetyTimeout(30000); // 30s para conectar e listar a pasta
+    });
 
-    return Promise.race([imapPromise, timeoutPromise]);
+    try {
+      return await Promise.race([imapPromise, timeoutPromise]);
+    } finally {
+      clearTimeout(safetyTimer);
+    }
   }
 
   // --- o resto do arquivo não muda nada ---
@@ -175,7 +226,15 @@ export class EmailService {
     }
 
     const title = mail.subject || `E-mail de ${senderName}`;
-    const description = mail.text || mail.html || '';
+    let rawDescription = mail.text || mail.html || '';
+    // Sanitização contra injeção de scripts maliciosos e tags perigosas oriundas de e-mail
+    if (typeof rawDescription === 'string') {
+      rawDescription = rawDescription
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+        .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+        .replace(/javascript:[^"']*/gi, '');
+    }
+    const description = rawDescription;
 
 	const emailSentAt = mail.date
       ? new Date(mail.date.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 19)

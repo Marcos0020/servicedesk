@@ -16,10 +16,12 @@ export class AuthService {
     if (!user || !user.is_active) {
       throw new UnauthorizedException('Credenciais inválidas ou usuário inativo');
     }
+
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       throw new UnauthorizedException('Credenciais inválidas');
     }
+
     const { password_hash, ...result } = user;
     return result;
   }

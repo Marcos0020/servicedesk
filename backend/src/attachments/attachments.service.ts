@@ -94,7 +94,12 @@ export class AttachmentsService {
   }
 
   getFullPath(filePath: string): string {
-    return path.join(this.storagePath, filePath);
+    const resolvedBase = path.resolve(this.storagePath);
+    const safePath = path.resolve(resolvedBase, filePath);
+    if (!safePath.startsWith(resolvedBase)) {
+      throw new BadRequestException('Acesso não autorizado: caminho de arquivo fora do storage.');
+    }
+    return safePath;
   }
 
   private validateFile(mimeType: string, size: number, name: string): void {
